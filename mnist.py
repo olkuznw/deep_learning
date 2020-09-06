@@ -10,13 +10,26 @@ def relu2deriv(x):
     return x >= 0
 
 
+def tanh(x):
+    return np.tanh(x)
+
+
+def tanh2deriv(x):
+    return 1 - x ** 2
+
+
+def softmax(x):
+    temp = np.exp(x)
+    return temp / np.sum(temp, axis=1, keepdims=True)
+
+
 def print_result(iteration, error, correct_cnt, test_error, test_correct_cnt, number_to_test):
     print('Iteration: {iteration}; Train-Err: {train_error}; Train-Acc: {train_acc}; '
           'Test-Err: {test_error}; Test-Acc: {test_acc}'.format(
             iteration=iteration,
-            test_error=test_error / number_to_test,
+            test_error=test_error / number_to_test if test_error else '-',
             test_acc=test_correct_cnt / number_to_test,
-            train_error=error / number_to_test,
+            train_error=error / number_to_test if error else '-',
             train_acc=correct_cnt / number_to_test
     ))
 
@@ -26,7 +39,8 @@ def stochastic_gradient_descent(images, labels, weights_0_1, weights_1_2, iterat
     print('stochastic_gradient_descent')
     alpha = 0.005
     for j in range(iterations):
-        error, correct_cnt = (0.0, 0)
+        error = 0
+        correct_cnt = 0
         for i in range(number_to_test):
             layer_0 = images[i:i + 1]
             layer_1 = relu(np.dot(layer_0, weights_0_1))
@@ -100,6 +114,42 @@ def batch_gradient_descent(images, labels, weights_0_1, weights_1_2, iterations,
                          test_correct_cnt=test_correct_cnt, number_to_test=number_to_test)
 
 
+def activation_func_batch_gradient_descent(images, labels, weights_0_1, weights_1_2, iterations, number_to_test,
+                                            images_test, labels_test):
+    print('activation_funct_batch_gradient_descent')
+    alpha = 2
+    batch_size = 100
+    for j in range(iterations):
+        correct_cnt = 0
+        for i in range(int(number_to_test/batch_size)):
+            batch_start = i * batch_size
+            batch_end = (i + 1) * batch_size
+            layer_0 = images[batch_start:batch_end]
+            layer_1 = tanh(np.dot(layer_0, weights_0_1))
+            dropout_mask = np.random.randint(2, size=layer_1.shape)
+            layer_1 *= dropout_mask * 2
+            layer_2 = softmax(np.dot(layer_1, weights_1_2))
+
+            for k in range(batch_size):
+                correct_cnt += int(np.argmax(layer_2[k:k + 1]) == np.argmax(labels[batch_start + k:batch_start + k + 1]))
+
+            layer_2_delta = (labels[batch_start:batch_end] - layer_2)/(batch_size * layer_2.shape[0])
+            layer_1_delta = layer_2_delta.dot(weights_1_2.T) * tanh2deriv(layer_1)
+            layer_1_delta *= dropout_mask
+            weights_1_2 += alpha * layer_1.T.dot(layer_2_delta)
+            weights_0_1 += alpha * layer_0.T.dot(layer_1_delta)
+
+        test_correct_cnt = 0
+        for i in range(number_to_test):
+            layer_0 = images_test[i:i+1]
+            layer_1 = tanh(np.dot(layer_0, weights_0_1))
+            layer_2 = np.dot(layer_1, weights_1_2)
+            test_correct_cnt += int(np.argmax(layer_2) == np.argmax(labels_test[i:i+1]))
+        if j % 10 == 0:
+            print_result(iteration=j, error=None, correct_cnt=correct_cnt, test_error=None,
+                         test_correct_cnt=test_correct_cnt, number_to_test=number_to_test)
+
+
 
 if '__main__' == __name__:
     # x_train, x_test - images
@@ -128,13 +178,23 @@ if '__main__' == __name__:
     iterations = 300
     hidden_size = 100
 
-    weights_0_1 = 0.2 * np.random.random((image_size, hidden_size)) - 0.1
-    weights_1_2 = 0.2 * np.random.random((hidden_size, num_labels)) - 0.1
+    weights_0_1_tmp = np.random.random((image_size, hidden_size))
+    weights_1_2_tmp = np.random.random((hidden_size, num_labels))
+
+    weights_0_1 = 0.2 * weights_0_1_tmp - 0.1
+    weights_1_2 = 0.2 * weights_1_2_tmp - 0.1
 
     stochastic_gradient_descent(images=images, labels=labels, weights_0_1=weights_0_1, weights_1_2=weights_1_2,
-                           iterations=iterations, number_to_test=number_to_test, images_test=images_test,
-                           labels_test=labels_test)
+                                iterations=iterations, number_to_test=number_to_test, images_test=images_test,
+                                labels_test=labels_test)
 
     batch_gradient_descent(images=images, labels=labels, weights_0_1=weights_0_1, weights_1_2=weights_1_2,
                            iterations=iterations, number_to_test=number_to_test, images_test=images_test,
                            labels_test=labels_test)
+
+    weights_0_1 = 0.02 * weights_0_1_tmp - 0.01
+    activation_func_batch_gradient_descent(images=images, labels=labels, weights_0_1=weights_0_1,
+                                           weights_1_2=weights_1_2,
+                                           iterations=iterations, number_to_test=number_to_test,
+                                           images_test=images_test,
+                                           labels_test=labels_test)
