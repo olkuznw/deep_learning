@@ -1,5 +1,14 @@
 import sys
 import numpy as np
+import math
+from collections import Counter
+
+np.random.seed(1)
+
+
+def sigmoid(x):
+    return 1/(1 + np.exp(-x))
+
 
 with open('reviews.txt') as f:
     raw_reviews = f.readlines()
@@ -37,10 +46,6 @@ for label in raw_labels:
     target_dataset.append(int('positive' == label))
 
 
-def sigmoid(x):
-    return 1/(1 + np.exp(-x))
-
-
 alpha = 0.01
 iterations = 2
 hidden_size = 100
@@ -56,8 +61,52 @@ for iter in range(iterations):
         x = input_dataset[i]
         y = target_dataset[i]
 
-        layer_1 = sigmoid(np.sum(weights_0_1, axis=x))
+        layer_1 = sigmoid(np.sum(weights_0_1[x], axis=0))
         layer_2 = sigmoid(np.dot(layer_1, weights_1_2))
 
         layer_2_delta = layer_2 - y
         layer_1_delta = layer_2_delta.dot(weights_1_2.T)
+
+        weights_0_1[x] -= layer_1_delta * alpha
+        weights_1_2 -= np.outer(layer_1, layer_2_delta) * alpha
+
+        if (np.abs(layer_2_delta)) < 0.5:
+            correct += 1
+        total += 1
+
+        if i % 10 == 9:
+            progress = str(i / float(len(input_dataset)))
+            training_accuracy = correct / total
+            sys.stdout.write(f'\rIter: {iter}; progress: {progress}%; training accuracy: {training_accuracy}%')
+
+    print()
+
+correct = 0
+total = 0
+
+for i in range(number_to_test, len(input_dataset)):
+    x = input_dataset[i]
+    y = target_dataset[i]
+
+    layer_1 = sigmoid(np.sum(weights_0_1[x], axis=0))
+    layer_2 = sigmoid(np.dot(layer_1, weights_1_2))
+
+    if np.abs(layer_2 - y) < 0.5:
+        correct += 1
+    total += 1
+
+training_accuracy = correct / total
+print(f'test accuracy: {training_accuracy}')
+
+
+def similar(target):
+    target_index = word2index[target]
+    scores = Counter()
+    for word, index in word2index.items():
+        raw_difference = weights_0_1[index] - weights_0_1[target_index]
+        squared_difference = raw_difference ** 2
+        scores[word] = - math.sqrt(sum(squared_difference))
+
+    return scores.most_common(10)
+
+print(*similar('beautiful'), sep='\n')
